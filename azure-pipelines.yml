@@ -1,0 +1,23 @@
+# Modify or copy this pipeline job file to fit your needs: add schedule for job runs , set timezone 
+
+
+trigger: none
+
+# schedules:
+# - cron: "41 7 * * *"  # 8am UTC = 5pm JST time
+#   displayName: Daily midnight build
+#   always: true
+
+# Override this value if necessary
+variables:
+  UseSelfHostedAgent: false
+  timezone: +0:00
+
+extends:
+  template: runDexter_template.yml
+  parameters:
+    JobFile: ${{ variables.jobfile }}
+    to: ${{ variables.to }}
+    from: ${{ variables.from }}
+    timezone: ${{ variables.timezone }}
+    UseSelfHostedAgent: ${{ variables.UseSelfHostedAgent }}

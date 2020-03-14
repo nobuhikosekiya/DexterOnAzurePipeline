@@ -1,0 +1,131 @@
+parameters:
+- name: JobFile
+  type: string
+  default: 'SampleJob.json'
+- name: UseSelfHostedAgent
+  type: boolean
+  default: false
+- name: to
+  type: string
+  default: ''
+- name: from
+  type: string
+  default: ''
+- name: timezone
+  type: string
+  default: '+0:00'
+
+stages:
+- stage: run_dexter
+
+  ${{ if eq(parameters.UseSelfHostedAgent, true) }}:
+    pool: MyHost
+
+  ${{ if eq(parameters.UseSelfHostedAgent, false) }}:
+    pool: 
+      vmImage: 'vs2017-win2016'
+
+  jobs:
+  - job: run_dexter
+    timeoutInMinutes: 360
+    workspace:
+      clean: all
+    variables:
+      jobfile_folder: jobfiles
+
+    steps:
+
+    - bash: |
+        echo "##vso[task.setvariable variable=fromdate]$(from)"
+      displayName: Set start date to parameter 'from'
+      condition: ne(variables['from'], '')
+
+    - bash: |
+        echo "##vso[task.setvariable variable=fromdate]`TZ=Asia/Tokyo date '+%Y-%m-%d' -d '1 day ago'`"
+      displayName: Set start date to yesterday
+      condition: eq(variables['from'], '')
+
+    - bash: |
+        echo "##vso[task.setvariable variable=todate]$(to)"
+      displayName: Set start date to parameter 'to'
+      condition: ne(variables['to'], '')
+
+    - bash: |
+        echo "##vso[task.setvariable variable=todate]`TZ=Asia/Tokyo date '+%Y-%m-%d'`"
+      displayName: Set end date to today
+      condition: eq(variables['to'], '')
+
+    - bash: |
+        echo "##vso[task.setvariable variable=FROM_DATETIME]${FROMDATE}T00:00:00$(timezone)"
+      displayName: Set FROM datetime
+
+    - bash: |
+        echo "##vso[task.setvariable variable=TO_DATETIME]${TODATE}T00:00:00$(timezone)"
+      displayName: Set TO datetime
+
+    - task: Bash@3
+      displayName: Modify start and end datetime in job file
+      inputs:
+        targetType: 'filePath' # Optional. Options: filePath, inline
+        filePath: $(Build.SourcesDirectory)/setOptions.sh # Required when targetType == FilePath
+        #arguments: # Optional
+        #script: '# echo Hello world' # Required when targetType == inline
+        workingDirectory: $(Build.SourcesDirectory) # Optional
+        #failOnStderr: false # Optional
+        #noProfile: true # Optional
+        #noRc: true # Optional
+      env:
+        FROM_DATETIME: ${{ variables.from_datetime }}
+        TO_DATETIME: ${{ variables.to_datetime }}
+        JOBFILE_PATH: ${{ variables.jobfile_folder }}/$(JobFile)
+        # JOBNAME: ${{ variables.jobname }}
+        OUT_JOBFILE_PATH: $(Build.ArtifactStagingDirectory)/$(JobFile)
+
+    - bash: |
+        echo "$(Build.ArtifactStagingDirectory)/$(JobFile)"; cat "$(Build.ArtifactStagingDirectory)/$(JobFile)"
+      displayName: Show job file
+
+    - ${{ if eq(parameters.UseSelfHostedAgent, false) }}:
+      - bash: 'unzip *win-core*zip' # script path or inline
+        workingDirectory:
+        displayName: Unzip Dexter zip file
+        failOnStderr: #
+
+      - script: AppDynamics.Dexter.exe --job-file $(Build.ArtifactStagingDirectory)/$(JobFile) --output-folder $(Build.ArtifactStagingDirectory)/AppD.Dexter.Out
+        workingDirectory:  core-win
+        displayName: Run Dexter on Windows
+        failOnStderr: #
+
+    - ${{ if eq(parameters.UseSelfHostedAgent, true) }}:
+      - script: /home/nobu/dexter/core-linux/AppDynamics.Dexter --job-file $(Build.ArtifactStagingDirectory)/$(JobFile) --output-folder $(Build.ArtifactStagingDirectory)/AppD.Dexter.Out
+        workingDirectory:  /home/nobu/dexter/core-linux
+        timeoutInMinutes: 360
+        displayName: Run Dexter on Linux Self Hosted Agent
+        failOnStderr: #
+
+    - bash: |
+        echo "##vso[task.setvariable variable=jobname]`echo $JOBFILE | sed 's/\.[^\.]*$//'`"
+      displayName: Set jobfile name 
+
+    - bash: |
+        echo "##vso[task.setvariable variable=artifactfilename]`echo ${JOBNAME}.${FROMDATE}_${TODATE}`.$(Build.BuildId)"
+      displayName: Set artifact file name 
+
+    - task: ArchiveFiles@2
+      displayName: Archive Dexter Report
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/AppD.Dexter.Out/$(jobname)/Report' 
+        includeRootFolder: true 
+        archiveType: 'zip' # Options: zip, 7z, tar, wim
+        #tarCompression: 'gz' # Optional. Options: gz, bz2, xz, none
+        archiveFile: '$(Build.ArtifactStagingDirectory)/$(artifactfilename).zip' 
+        #replaceExistingArchive: true 
+        #verbose: # Optional
+        #quiet: # Optional
+
+    - task: PublishBuildArtifacts@1
+      displayName: Publish Dexter Report as Artifact
+      inputs:
+        pathtoPublish: '$(Build.ArtifactStagingDirectory)/$(artifactfilename).zip'
+        artifactName: $(artifactfilename)
+
