@@ -5,7 +5,7 @@ Steps:
 
 After this code is copied into your private DevOps Repos:
 1. Add your Dexter job json file into the jobfiles folder.
-2. Add a Dexter installer from https://github.com/Appdynamics/AppDynamics.DEXTER/releases. Upload the win-core version installer.
+2. Add a Dexter installer from https://github.com/Appdynamics/AppDynamics.DEXTER/releases. Upload the win-core version installer to the root directory of this project.
 3. Modify azure-pipelinse.yml if needed. Set the timezone variable to your timezone.
 4. Create a pipeline.
 5. Run the pipeline. Set the pipeline variable as below:
